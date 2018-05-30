@@ -1,0 +1,136 @@
+﻿
+@{
+    ViewData["Title"] = "StudentMenu";
+    Layout = "~/Views/Shared/_Layout.cshtml";
+}
+
+<h2>Studentenmenu</h2>
+<h1 id="Exam"></h1>
+
+<div class="container">
+
+
+
+    <div class="col-xs-6">
+        <h2>Download Examen</h2>
+        <form action="/Examsessions/DownloadFile" method="get">
+            <div class="input-group">
+                <button type="submit" class="btn btn-primary">download startoplossing</button><br />
+            </div>
+        </form>
+    </div>
+</div>
+
+<div class="container">
+    
+    <hr />
+
+    <div class="col-lg-10">
+
+        @if (ViewBag.MD5 != null)
+        {
+            <h1 >MD5: @ViewBag.md5</h1>
+        }
+        else
+        {
+
+            <h2>Upload Examen</h2>
+            <form action="/solutions/UploadFile" method="post" enctype="multipart/form-data">
+
+                <div>
+                    <h4>Documents</h4>
+                    <div class="input-group">
+                        <span class="input-group-btn">
+                            <span class="btn btn-primary btn-file">
+                                Bladeren&hellip; <input type="file" name="File" id="File" single>
+                            </span>
+                            <button type="submit" class="btn btn-primary">examen indienen</button>
+                        </span>
+                        <input type="text" class="form-control" readonly>
+                    </div>
+                </div>
+
+                <div class="input-group">
+                </div>
+            </form>
+
+        }
+    </div>
+</div>
+
+
+
+
+<script type="text/javascript">
+    window.onload = (function () {
+        $.ajax({
+            url: "http://localhost:51215/students/getstudentexam", data: {"Id":@ViewBag.id}, success: function (result) {
+
+                document.getElementById("Exam").innerHTML = result;
+            }
+        });
+    });
+</script>
+
+<script>
+    $(function () {
+
+        // We can attach the `fileselect` event to all file inputs on the page
+        $(document).on('change', ':file', function () {
+            var input = $(this),
+                numFiles = input.get(0).files ? input.get(0).files.length : 1,
+                label = input.val().replace(/\\/g, '/').replace(/.*\//, '');
+            input.trigger('fileselect', [numFiles, label]);
+        });
+    });
+
+</script>
+<script>
+    $(document).on('change', '.btn-file :file', function () {
+        var input = $(this),
+            numFiles = input.get(0).files ? input.get(0).files.length : 1,
+            label = input.val().replace(/\\/g, '/').replace(/.*\//, '');
+        input.trigger('fileselect', [numFiles, label]);
+    });
+
+    $(document).ready(function () {
+        $('.btn-file :file').on('fileselect', function (event, numFiles, label) {
+
+            var input = $(this).parents('.input-group').find(':text'),
+                log = numFiles > 1 ? numFiles + ' files selected' : label;
+
+            if (input.length) {
+                input.val(log);
+            } else {
+                if (log) alert(log);
+            }
+
+        });
+    });
+</script>
+<style>
+    .btn-file {
+        position: relative;
+        overflow: hidden;
+    }
+
+        .btn-file input[type=file] {
+            position: absolute;
+            top: 0;
+            right: 0;
+            min-width: 100%;
+            min-height: 100%;
+            font-size: 100px;
+            text-align: right;
+            filter: alpha(opacity=0);
+            opacity: 0;
+            background: red;
+            cursor: inherit;
+            display: block;
+        }
+
+    input[readonly] {
+        background-color: white !important;
+        cursor: text !important;
+    }
+</style>

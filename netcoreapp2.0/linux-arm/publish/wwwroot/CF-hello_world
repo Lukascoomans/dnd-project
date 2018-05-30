@@ -1,0 +1,192 @@
+{
+  "AWSTemplateFormatVersion" : "2010-09-09",
+  "Description" : "setup a basic apache hello world",
+  "Parameters" : {
+  	"KeyName": {
+      "Description" : "Name of an existing EC2 KeyPair to enable SSH access to the instances",
+      "Type": "AWS::EC2::KeyPair::KeyName"
+    },
+    "InstanceType": {
+    	"Description": "EC2 instance type",
+      	"Type": "String",
+      	"AllowedValues": [
+	        "t2.nano", "t2.micro","t2.small","t2.medium"
+	    ],
+	    "ConstraintDescription": "must be a valid EC2 instance type."
+    },
+    "AppName": {
+    	"Description": "EC2 instance type",
+      	"Type": "String"
+    },
+    "IpAdress": {
+    	"Description": "ip range we are allowed to connect from",
+      	"Type": "String",
+      	"AllowedPattern": "(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})\\.(\\d{1,3})/(\\d{1,2})",
+      	"ConstraintDescription": "must be a valid ip range x.x.x.x/24"
+    },
+    "Subnets": {
+		"Type": "List<AWS::EC2::Subnet::Id>",
+		"Description": "List of available subnets to use, you can select them all"
+	},
+	"VPCId": {
+		"Description": "Provide the VPC this needs to run on.",
+      	"Type": "AWS::EC2::VPC::Id"
+    },
+    "ASGMaxSize" : {
+        "Description": "Max Number of instances that should be maintained (has to be bigger than Min size, duh)",
+        "Type": "Number",
+        "Default": "2"
+    },
+    "ASGMinSize" : {
+        "Description": "Min Number of instances that should be maintained",
+        "Type": "Number",
+        "Default": "1"
+    }
+  },
+  "Resources" : {
+  	"OutsideAcc": {
+        "Type": "AWS::EC2::SecurityGroup",
+        "Properties": {
+            "GroupDescription": "Enable SSH access from ip",
+            "SecurityGroupIngress" : [{
+                "Description" : "edgmzproxy",
+                "IpProtocol" : "tcp",
+                "FromPort" : "80",
+                "ToPort" : "80",
+                "CidrIp" : "0.0.0.0/0"
+            }],
+            "VpcId": {"Ref" : "VPCId"},
+            "Tags": [
+                { "Key": "Name", "Value": {"Fn::Join": ["-", ["OutsideAcc", {"Ref": "AppName"}]]}},
+                { "Key" : "Region",  "Value" : { "Ref": "AWS::Region"}},
+                { "Key" : "Account", "Value" : { "Ref" : "AWS::AccountId"}}
+            ]
+        }
+    },
+  	"InternalAcc": {
+        "Type": "AWS::EC2::SecurityGroup",
+        "Properties": {
+            "GroupDescription": "Enable SSH access from ip",
+            "SecurityGroupIngress" : [{
+                "Description" : "edgmzproxy",
+                "IpProtocol" : "tcp",
+                "FromPort" : "22",
+                "ToPort" : "22",
+                "CidrIp" : {"Ref" : "IpAdress"}
+            },{
+                "IpProtocol": "tcp",
+                "FromPort": "80",
+                "ToPort": "80",
+                "SourceSecurityGroupId": {
+                    "Fn::GetAtt": [
+                    "OutsideAcc",
+                    "GroupId"]
+                }
+            }],
+            "VpcId": {"Ref" : "VPCId"},
+            "Tags": [
+                { "Key": "Name", "Value": {"Fn::Join": ["-", ["InternalAcc", {"Ref": "AppName"}]]}},
+                { "Key" : "Region",  "Value" : { "Ref": "AWS::Region"}},
+                { "Key" : "Account", "Value" : { "Ref" : "AWS::AccountId"}}
+            ]
+        }
+    },
+    "ALB": {
+        "Type" : "AWS::ElasticLoadBalancingV2::LoadBalancer",
+        "Properties" : {
+            "Name": {"Fn::Join": ["-", [{"Ref": "AppName"}, "ALB","HTTP"]]},
+            "SecurityGroups" : [{ "Fn::GetAtt": ["OutsideAcc", "GroupId"]}],
+            "Subnets" : { "Ref" : "Subnets"},
+            "IpAddressType" : "ipv4",
+            "Scheme" : "internet-facing",
+            "Tags": [
+                { "Key": "Name", "Value": {"Fn::Join": ["-", ["OutsideAcc", {"Ref": "AppName"}]]}},
+                { "Key": "Region",  "Value" : { "Ref": "AWS::Region"}},
+                { "Key": "Account", "Value" : { "Ref" : "AWS::AccountId"}}
+            ]
+        }
+    },
+    "ALBTargetGroup" : {
+        "Type" : "AWS::ElasticLoadBalancingV2::TargetGroup",
+        "Properties" : {
+            "Matcher" : {
+                "HttpCode" : "200"
+            },
+            "Name": {"Fn::Join": ["-", ["TG", {"Ref": "AppName"}]]},
+            "Port":  "80",
+            "UnhealthyThresholdCount" : 10,
+            "HealthCheckIntervalSeconds" : 60,
+            "HealthyThresholdCount": 2,
+            "HealthCheckPath" : "/",
+            "Protocol": "HTTP",
+            "VpcId": {"Ref" : "VPCId"},
+            "Tags" : [
+                { "Key": "Name", "Value": {"Fn::Join": ["-", ["TG", {"Ref": "AppName"}]]}},
+                { "Key": "Region",  "Value" : { "Ref": "AWS::Region"}},
+                { "Key": "Account", "Value" : { "Ref" : "AWS::AccountId"}}
+            ]
+      }
+    },
+    "ALBListenerHttp": {
+        "Type": "AWS::ElasticLoadBalancingV2::Listener",
+        "Properties": {
+            "DefaultActions": [{
+                "Type": "forward",
+                "TargetGroupArn": { "Ref": "ALBTargetGroup" }
+            }],
+            "LoadBalancerArn": { "Ref": "ALB" },
+            "Port": "80",
+            "Protocol": "HTTP"
+        }
+    },
+    "LaunchConfig" : {
+	   "Type" : "AWS::AutoScaling::LaunchConfiguration",
+	   "Properties" : {
+	      "KeyName" : { "Ref" : "KeyName" },
+	      "ImageId" : "ami-7c491f05",
+	      "UserData" : { "Fn::Base64" : { "Fn::Join" : ["", [
+	        "#!/bin/bash\n",
+	        "set -Eeuxo pipefail\n",
+	        "trap \"shutdown -h now\" ERR\n",
+
+	        "sudo yum update -y \n",
+			"sudo yum install -y httpd \n",
+			"sudo groupadd www\n",
+			"sudo usermod -a -G www ec2-user\n",
+			"echo '<html><body>Hello World</html></body>' > /var/www/html/index.html\n",
+			"sudo chown -R root:www /var/www \n",
+			"sudo chmod 2775 /var/www \n",
+			"find /var/www -type d -exec sudo chmod 2775 {} + \n",
+			"find /var/www -type f -exec sudo chmod 0664 {} + \n",
+			"sudo service httpd start\n",
+	        "\n"]]}},
+	      "SecurityGroups" : [ { "Ref" : "InternalAcc" } ],
+	      "InstanceType" : { "Ref" : "InstanceType" }
+	   }
+	},
+    "ASG" : {
+        "Type" : "AWS::AutoScaling::AutoScalingGroup",
+        "Properties" : {
+            "LaunchConfigurationName" : {"Ref": "LaunchConfig"},
+            "HealthCheckGracePeriod": 1200,
+            "HealthCheckType" : "ELB",
+            "MinSize" : { "Ref" : "ASGMinSize"},
+            "MaxSize" : { "Ref" : "ASGMaxSize"},
+            "VPCZoneIdentifier" : { "Ref" : "Subnets" },
+            "Tags" : [
+                {"Key" : "Name", "Value": {"Fn::Join": ["-", [{"Ref": "AppName"}, "webserver"]]}, "PropagateAtLaunch" : "true"},
+                {"Key" : "AppName", "Value": { "Ref" : "AppName"}, "PropagateAtLaunch" : "true"},
+                {"Key" : "Region",  "Value" : { "Ref": "AWS::Region"}, "PropagateAtLaunch": "true"},
+                {"Key" : "Account", "Value" : { "Ref" : "AWS::AccountId"}, "PropagateAtLaunch": "true"}
+            ],
+            "TargetGroupARNs" : [{ "Ref" : "ALBTargetGroup" }]
+        }
+    }
+  },
+  "Outputs" : {
+  	"LoadBalancerDNS" : {
+        "Value" : {"Fn::GetAtt": [ "ALB", "DNSName" ] },
+        "Description" : "dns name of the LoadBalancer"
+    }
+  }
+}

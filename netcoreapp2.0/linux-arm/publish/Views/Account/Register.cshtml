@@ -1,0 +1,112 @@
+﻿@model RegisterViewModel
+@{
+    ViewData["Title"] = "Register";
+}
+
+<h2>Registreer</h2>
+
+<div class="row">
+    <div class="col-md-4">
+        <form id="surveyForm" asp-route-returnUrl="@ViewData["ReturnUrl"]" method="post">
+            <hr />
+            <div class="form-group">
+                <label for="Email">E-mailadres:</label>
+                <input class="form-control" id="Email" name="Email" placeholder="11223344@student.pxl.be" />
+            </div><div class="form-group">
+                <label for="UserName">Gebruikersnaam:</label>
+                <input class="form-control" id="UserName" name="UserName" placeholder="Achternaam_Voornaam"/>
+            </div>
+            <div class="form-group">
+                <label for="ExamName">ExamenNaam:</label><br />
+                <select id="ExamName" name="ExamName" class="form-control"></select>
+            </div>
+            <div class="form-group">
+                <label for="Password">Wachtwoord:</label>
+                <input class="form-control" id="Password" type="password" name="Password"/>
+            </div>
+            <button type="submit" class="btn btn-default">Register</button>
+        </form>
+    </div>
+</div>
+
+
+<script type="text/javascript">
+    window.onload = (function () {
+        $.ajax({
+            url: "https://localhost:44366/examsessions/getexams", success: function (result) {
+                console.log(result);
+                var output = "";
+                for (i = 0; i < result.length; i++) {
+                    console.log(output);
+                    output = output.concat("<option>".concat(result[i]).concat("</option>"));
+                }
+                document.getElementById("ExamName").innerHTML = output;
+                console.log(result);
+            }
+        });
+    });
+</script>
+<script type="text/javascript">
+    $(document).ready(function () {
+        $("#surveyForm")
+            .bootstrapValidator({
+                feedbackIcons: {
+                    valid: 'glyphicon glyphicon-ok',
+                    invalid: 'glyphicon glyphicon-remove',
+                    validating: 'glyphicon glyphicon-refresh'
+                },
+                fields: {
+                    Email: {
+                        validators: {
+                            notEmpty: {
+                                message: 'Vul je studentenmail in.'
+                            },
+                            emailAddress: {
+                                message: 'Dit is geen e-mailadres.'
+                            },
+                            regexp: {
+                                regexp: /^([0-9]{8})([@@])([a-z]*)(\.)([a-z]*)(\.)([a-z]*)/g,
+                                message: 'Vul je studentenmail in'
+                            }
+                        }
+                    },
+                    UserName: {
+                        validators: {
+                            notEmpty: {
+                                message: 'Vul je gebruikersnaam in.'
+                            },
+                            stringLength: {
+                                min: 6,
+                                max: 30,
+                                message: 'Je gebruikersnaam moet tussen de 6 en 30 karakters zijn.'
+                            },
+                            regexp: {
+                                regexp: /^[A-Z]([a-z]*)(([_])[A-Z]([a-z]*))*$/,
+                                message: 'Vul in zoals het voorbeeld: Achternaam_Voornaam'
+                            }
+                        }
+                    },
+                    Password: {
+                        validators: {
+                            notEmpty: {
+                                message: 'Kies een wachtwoord'
+                            },
+                            regexp: {
+                                regexp: /^(?=.*[a-z])(?=.*[A-Z])(?=.*\d)[a-zA-Z\d]{8,}$/,
+                                message: 'Gebruik minimum één hoofdletter, kleine letter en cijfer voor veiligheid.'
+                            },
+                            stringLength: {
+                                min: 8,
+                                message: 'Je wachtwoord moet minimun 8 karakters hebben.'
+                            },
+                            different: {
+                                field: 'UserName',
+                                message: 'onveilig, gebruik een ander wachtwoord'
+                            }
+                        }
+                    }
+
+                }
+            });
+    });
+</script>
